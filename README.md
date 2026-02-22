@@ -16,5 +16,3 @@ This project implements a hybrid workflow to assess urban rooftop solar potentia
 2. **Data Retrieval**: Download orthophotos for the defined grids.
 3. **ML Inference**: Detect rooftop polygons and existing PV panels using yolo trained on ~500 images.
 5. **Visualization**: Classifies roofs into five categories from "Highly Suitable" to "Worst".
-# as
-# Rooftop-Solar-Suitability-Mapping-Bangalore
