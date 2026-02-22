@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Full Rooftop & Solar Panel Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .legend {
+      position: absolute; z-index: 1000; bottom: 20px; left: 20px;
+      background: white; padding: 10px; border-radius: 8px;
+      font-size: 14px; box-shadow: 0 0 8px rgba(0,0,0,0.3); line-height: 1.4;
+    }
+    .legend-title { font-weight: bold; margin-bottom: 6px; }
+    .legend-item { display: flex; align-items: center; margin-bottom: 4px; }
+    .legend-color {
+      width: 18px; height: 18px; margin-right: 8px; border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="legend">
+    <div class="legend-title">Legend</div>
+    <div class="legend-item"><div class="legend-color" style="background:#800080;"></div>Has Solar Panel</div>
+    <div class="legend-item"><div class="legend-color" style="background:hsl(0,100%,40%);"></div>Low Radiation</div>
+    <div class="legend-item"><div class="legend-color" style="background:hsl(45,100%,40%);"></div>Medium Radiation</div>
+    <div class="legend-item"><div class="legend-color" style="background:hsl(90,100%,40%);"></div>High Radiation</div>
+    <div class="legend-item"><div class="legend-color" style="background:#0000ff;"></div>Solar Panel Box</div>
+    <div class="legend-title" style="margin-top:8px;">Ward Colors: Unique</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const mapCenterLat = 12.9313;
+    const zoomLevel = 20;
+
+    // Google Maps meters per pixel formula:
+    const metersPerPixel = (156543.03392 * Math.cos(mapCenterLat * Math.PI / 180)) / Math.pow(2, zoomLevel);
+    console.log("Meters per pixel:", metersPerPixel.toFixed(4));
+
+    const map = L.map('map').setView([mapCenterLat, 77.5399], zoomLevel);
+
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=YOUR_API_KEY', {
+      maxZoom: 24,
+      attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
+    }).addTo(map);
+
+    let rooftopLayer, solarLayer, coverageLayer;
+
+    fetch('rooftops_with_radiation.geojson')
+      .then(res => res.json())
+      .then(data => {
+        const rooftopFeatures = data.features.filter(f => f.properties.class === "rooftop");
+        const solarFeatures = data.features.filter(f => f.properties.type === "solar_box");
+        const coverageFeatures = data.features.filter(f => f.properties.type === "coverage_mask" || f.properties.type === "ward_outline");
+
+        const annValues = rooftopFeatures.map(f => f.properties.ann_radiation).filter(v => v !== null);
+        const minRad = Math.min(...annValues);
+        const maxRad = Math.max(...annValues);
+
+        // Static band thresholds
+        const lowThreshold = minRad + (maxRad - minRad) * (1/3);
+        const medThreshold = minRad + (maxRad - minRad) * (2/3);
+
+        const wardNames = [...new Set(coverageFeatures.map(f => f.properties.ward || 'Unknown'))];
+        const wardColors = {};
+        const palette = ['#1f78b4', '#33a02c', '#fb9a99', '#ff7f00', '#6a3d9a', '#b15928', '#a6cee3', '#b2df8a'];
+        wardNames.forEach((ward, idx) => {
+          wardColors[ward] = palette[idx % palette.length];
+        });
+
+        rooftopLayer = L.geoJSON(rooftopFeatures, {
+          style: feature => {
+            const hasSolar = feature.properties.has_solar;
+            const r = feature.properties.ann_radiation;
+
+            if (hasSolar === 1 || hasSolar === true) {
+              return {
+                color: '#800080',
+                fillColor: '#800080',
+                weight: 1,
+                opacity: 0.7,
+                fillOpacity: 0.5
+              };
+            } else if (r < lowThreshold) {
+              return {
+                color: 'hsl(0, 100%, 40%)',
+                fillColor: 'hsl(0, 100%, 40%)',
+                weight: 1,
+                opacity: 0.7,
+                fillOpacity: 0.6
+              };
+            } else if (r < medThreshold) {
+              return {
+                color: 'hsl(45, 100%, 40%)',
+                fillColor: 'hsl(45, 100%, 40%)',
+                weight: 1,
+                opacity: 0.7,
+                fillOpacity: 0.6
+              };
+            } else {
+              return {
+                color: 'hsl(90, 100%, 40%)',
+                fillColor: 'hsl(90, 100%, 40%)',
+                weight: 1,
+                opacity: 0.7,
+                fillOpacity: 0.6
+              };
+            }
+          },
+          onEachFeature: (feature, layer) => {
+            const p = feature.properties;
+            const areaPx = (typeof p.area_px === 'number') ? p.area_px : null;
+            const areaM2 = areaPx !== null ? (areaPx * metersPerPixel * metersPerPixel) : null;
+            const radiation = (typeof p.ann_radiation === 'number') ? p.ann_radiation.toFixed(2) : 'N/A';
+
+            layer.bindPopup(`
+              <b>Rooftop</b><br>
+              Ward: ${p.ward}<br>
+              Image: ${p.image}<br>
+              Area (px): ${areaPx ? areaPx.toFixed(2) : 'N/A'}<br>
+              Area (m²): ${areaM2 ? areaM2.toFixed(2) : 'N/A'}<br>
+              Radiation: ${radiation} kWh/m²<br>
+              Has Solar: ${p.has_solar ? '✅ Yes' : '❌ No'}
+            `);
+          }
+        });
+
+        solarLayer = L.geoJSON(solarFeatures, {
+          style: {
+            color: '#0000ff',
+            weight: 2,
+            fillOpacity: 0,
+            dashArray: '4'
+          },
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup("🔷 Solar Panel Box");
+          }
+        });
+
+        coverageLayer = L.geoJSON(coverageFeatures, {
+          style: feature => {
+            const wardName = feature.properties.ward || 'Unknown';
+            return {
+              color: wardColors[wardName],
+              fillColor: wardColors[wardName],
+              weight: 2,
+              opacity: 0.7,
+              fillOpacity: 0.05
+            };
+          },
+          onEachFeature: (feature, layer) => {
+            const p = feature.properties;
+            const wardName = p.ward || 'Unknown';
+            const wardRooftops = rooftopFeatures.filter(r => r.properties.ward === wardName);
+            const total = wardRooftops.length;
+            const withSolar = wardRooftops.filter(r => r.properties.has_solar).length;
+            const lowRadNoSolar = wardRooftops.filter(r => !r.properties.has_solar && r.properties.ann_radiation < lowThreshold).length;
+            const medRadNoSolar = wardRooftops.filter(r => !r.properties.has_solar && r.properties.ann_radiation >= lowThreshold && r.properties.ann_radiation < medThreshold).length;
+            const highRadNoSolar = wardRooftops.filter(r => !r.properties.has_solar && r.properties.ann_radiation >= medThreshold).length;
+
+            layer.bindTooltip(`
+              <b>Ward: ${wardName}</b><br>
+              Total Rooftops: ${total}<br>
+              With Solar: ${withSolar}<br>
+              Low Rad, No Solar: ${lowRadNoSolar}<br>
+              Medium Rad, No Solar: ${medRadNoSolar}<br>
+              High Rad, No Solar: ${highRadNoSolar}
+            `, { sticky: true });
+          }
+        });
+
+        rooftopLayer.addTo(map);
+        solarLayer.addTo(map);
+        coverageLayer.addTo(map);
+        map.fitBounds(rooftopLayer.getBounds());
+
+        map.on('zoomend', () => {
+          const zoom = map.getZoom();
+          if (zoom <= 15) {
+            map.removeLayer(rooftopLayer);
+            map.removeLayer(solarLayer);
+            if (!map.hasLayer(coverageLayer)) map.addLayer(coverageLayer);
+          } else {
+            if (map.hasLayer(coverageLayer)) map.removeLayer(coverageLayer);
+            if (!map.hasLayer(rooftopLayer)) map.addLayer(rooftopLayer);
+            if (!map.hasLayer(solarLayer)) map.addLayer(solarLayer);
+          }
+        });
+      });
+  </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Rooftop Detection Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // Initialize map
+    const map = L.map('map').setView([12.9716, 77.5946], 17); // Adjust center if needed
+
+    // Google Satellite Tiles (replace YOUR_API_KEY)
+    const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=YOUR_API_KEY', {
+      maxZoom: 22,
+      attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>'
+    }).addTo(map);
+
+    // Load your GeoJSON file
+    fetch('rooftops.geojson')  // Make sure this file is served via a server
+      .then(res => res.json())
+      .then(data => {
+        const geoLayer = L.geoJSON(data, {
+          style: {
+            color: '#ffcc00',
+            opacity: 0.2,
+            fillColor: '#ffcc00'
+          },
+          onEachFeature: function (feature, layer) {
+            const props = feature.properties;
+            const popup = `
+              <b>Detected Rooftop</b><br>
+              Image: ${props.image}<br>
+              Area (px): ${props.area_px.toFixed(2)}
+            `;
+            layer.bindPopup(popup);
+          }
+        }).addTo(map);
+
+        // Fit map to GeoJSON bounds
+        map.fitBounds(geoLayer.getBounds());
+      })
+      .catch(err => console.error('Failed to load GeoJSON:', err));
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['Solar-Panel']
+
+roboflow:
+  workspace: jai-inq4m
+  project: solar-panel-detection-india
+  version: 1
+  license: MIT
+  url: https://universe.roboflow.com/jai-inq4m/solar-panel-detection-india/dataset/1
